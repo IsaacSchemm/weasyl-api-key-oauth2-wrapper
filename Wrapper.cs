@@ -72,21 +72,44 @@ namespace Wrapper {
         }
 
         [FunctionName("token")]
-        public static IActionResult Token([HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = null)] HttpRequest req) {
+        public static async Task<IActionResult> Token([HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = null)] HttpRequest req) {
             string grant_type = req.Form["grant_type"];
             if (grant_type != "authorization_code") {
-                return new BadRequestObjectResult(new { error = "The grant_type is invalid or missing." });
+                return new OkObjectResult(new {
+                    error = "unsupported_grant_type"
+                });
             }
 
             string code = req.Form["code"];
             if (string.IsNullOrEmpty(code)) {
-                return new BadRequestObjectResult(new { error = "The code is invalid or missing." });
+                return new OkObjectResult(new {
+                    error = "invalid_request"
+                });
             }
 
-            return new OkObjectResult(new {
-                access_token = code,
-                token_type = "weasyl"
-            });
+            var hreq = WebRequest.CreateHttp("https://www.weasyl.com/api/whoami");
+            hreq.UserAgent = "weasyl-api-key-oauth2-wrapper/0.0";
+            hreq.Headers["X-Weasyl-API-Key"] = code;
+            try {
+                using (var resp = await hreq.GetResponseAsync())
+                using (var sr = new StreamReader(resp.GetResponseStream())) {
+                    string json = await sr.ReadToEndAsync();
+                    var user = JsonConvert.DeserializeAnonymousType(json, new { login = "", userid = 0L });
+
+                    return new OkObjectResult(new {
+                        access_token = code,
+                        token_type = "weasyl",
+                        user.userid,
+                        user.login
+                    });
+                }
+            } catch (WebException ex) when ((ex.Response as HttpWebResponse)?.StatusCode == HttpStatusCode.Unauthorized) {
+                return new OkObjectResult(new {
+                    error = "invalid_grant"
+                });
+            } catch (WebException) {
+                return new StatusCodeResult((int)HttpStatusCode.BadGateway);
+            }
         }
     }
 }

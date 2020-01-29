@@ -36,17 +36,29 @@ namespace Wrapper {
 <html>
     <head>
         <title>Weasyl API Key OAuth2 Wrapper</title>
+        <meta name='viewport' content='width=device-width, initial-scale=1'>
+        <link rel='stylesheet' href='https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css' integrity='sha384-ggOyR0iXCbMQv3Xipma34MD+dH/1fQ784/j6cY/iJTQUOhcWr7x9JvoRxT2MZw1T' crossorigin='anonymous'>
     </head>
-<body>
+<body class='m-2'>
     <p>
         Enter your Weasyl API key below.<br />
-        You can obtain an API key by visiting the <a href='https://www.weasyl.com/control/apikeys'>Manage API Keys</a> page on the Weasyl site.
+        You can obtain an API key by visiting the <a href='https://www.weasyl.com/control/apikeys' target='_blank'>Manage API Keys</a> page on the Weasyl site.
     </p>
-    <form action='postback' method='post'>
+    <form action='postback' method='post' class='form-inline'>
         {0}
-        <input type='text' name='api_key' />
-        <input type='submit' value='Submit' />
+        <div class='form-group mr-2'>
+            <input type='text' name='api_key' class='form-control' />
+        </div>
+        <input type='submit' value='Submit' class='btn btn-primary' />
     </form>
+    <hr />
+    <p class='font-weight-bold'>This page was designed for Artwork Inbox and is not part of Weasyl. By entering your API key, you are giving another app access to your account.</p>
+    <hr />
+    <p class='small'>
+        <a href='https://github.com/IsaacSchemm/weasyl-api-key-oauth2-wrapper' target='_blank'>
+            View source on GitHub
+        </a>
+    </p>
 </body>
 </html>", hidden_inputs.ToString());
             return new FileContentResult(Encoding.UTF8.GetBytes(html), "text/html");

@@ -15,6 +15,22 @@ using System.Text;
 
 namespace Wrapper {
     public static class Wrapper {
+        [FunctionName("test")]
+        public static string Test([HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = null)] HttpRequest req) {
+            string input = req.Query["input"];
+            byte[] enc = AESGCM.SimpleEncrypt(Encoding.UTF8.GetBytes(input), new byte[] { 54, 95, 24, 65, 54, 95, 24, 65, 54, 95, 24, 65, 54, 95, 24, 65, 54, 95, 24, 65, 54, 95, 24, 65, 54, 95, 24, 65, 54, 95, 24, 65 });
+            return Uri.EscapeDataString(Convert.ToBase64String(enc));
+        }
+
+        [FunctionName("test2")]
+        public static string Test2([HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = null)] HttpRequest req) {
+            string input = req.Query["input"];
+            byte[] enc = Convert.FromBase64String(input);
+            byte[] dec = AESGCM.SimpleDecrypt(enc, new byte[] { 54, 95, 24, 65, 54, 95, 24, 65, 54, 95, 24, 65, 54, 95, 24, 65, 54, 95, 24, 65, 54, 95, 24, 65, 54, 95, 24, 65, 54, 95, 24, 65 });
+            string output = Encoding.UTF8.GetString(dec);
+            return output;
+        }
+
         [FunctionName("auth")]
         public static IActionResult Auth([HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = null)] HttpRequest req) {
             string response_type = req.Query["response_type"];

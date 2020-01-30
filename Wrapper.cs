@@ -119,25 +119,32 @@ namespace WeasylOAuthWrapper {
         [FunctionName("token")]
         public static async Task<IActionResult> Token([HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = null)] HttpRequest req) {
             string client_id = req.Form["client_id"];
-            string client_secret = GetClientSecret(client_id);
-            if (client_secret == null)
+            if (client_id == null)
                 return new OkObjectResult(new {
-                    error = "unauthorized_client"
+                    error = "unauthorized_client",
+                    error_description = "client_id is missing"
+                });
+
+            string client_secret = req.Form["client_secret"];
+            if (client_secret == null || client_secret != GetClientSecret(client_id))
+                return new OkObjectResult(new {
+                    error = "unauthorized_client",
+                    error_description = "client_secret is missing or does not match"
                 });
 
             string grant_type = req.Form["grant_type"];
-            if (grant_type != "authorization_code") {
+            if (grant_type != "authorization_code")
                 return new OkObjectResult(new {
-                    error = "unsupported_grant_type"
+                    error = "unsupported_grant_type",
+                    error_description = "Only authorization_code is supported"
                 });
-            }
 
             string code = req.Form["code"];
-            if (string.IsNullOrEmpty(code)) {
+            if (string.IsNullOrEmpty(code))
                 return new OkObjectResult(new {
-                    error = "invalid_request"
+                    error = "invalid_request",
+                    error_description = "code is missing or invalid"
                 });
-            }
 
             string apiKey = Decrypt(client_secret, code);
 
@@ -159,7 +166,8 @@ namespace WeasylOAuthWrapper {
                 }
             } catch (WebException ex) when ((ex.Response as HttpWebResponse)?.StatusCode == HttpStatusCode.Unauthorized) {
                 return new OkObjectResult(new {
-                    error = "invalid_grant"
+                    error = "invalid_grant",
+                    error_description = "API key rejected by Weasyl"
                 });
             } catch (WebException) {
                 return new StatusCodeResult((int)HttpStatusCode.BadGateway);

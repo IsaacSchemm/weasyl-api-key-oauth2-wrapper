@@ -10,7 +10,7 @@ using System.Net;
 using System.Web;
 using System.Text;
 
-namespace Wrapper {
+namespace WeasylOAuthWrapper {
     public static class Wrapper {
         private static string GetClientSecret(string clientId) {
             if (clientId == null)

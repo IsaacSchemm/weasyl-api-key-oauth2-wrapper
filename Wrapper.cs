@@ -17,15 +17,19 @@ namespace Wrapper {
     public static class Wrapper {
         [FunctionName("test")]
         public static string Test([HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = null)] HttpRequest req) {
+            byte[] key = Convert.FromBase64String(Environment.GetEnvironmentVariable("ClientSecret", EnvironmentVariableTarget.Process));
+
             string val = req.Query["val"];
-            string enc = AESGCM.SimpleEncrypt(val, new byte[] { 54, 95, 24, 65, 54, 95, 24, 65, 54, 95, 24, 65, 54, 95, 24, 65, 54, 95, 24, 65, 54, 95, 24, 65, 54, 95, 24, 65, 54, 95, 24, 65 });
+            string enc = AESGCM.SimpleEncrypt(val, key);
             return Uri.EscapeDataString(enc);
         }
 
         [FunctionName("test2")]
         public static string Test2([HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = null)] HttpRequest req) {
+            byte[] key = Convert.FromBase64String(Environment.GetEnvironmentVariable("ClientSecret", EnvironmentVariableTarget.Process));
+
             string enc = req.Query["enc"];
-            string dec = AESGCM.SimpleDecrypt(enc, new byte[] { 54, 95, 24, 65, 54, 95, 24, 65, 54, 95, 24, 65, 54, 95, 24, 65, 54, 95, 24, 65, 54, 95, 24, 65, 54, 95, 24, 65, 54, 95, 24, 65 });
+            string dec = AESGCM.SimpleDecrypt(enc, key);
             return dec;
         }
 

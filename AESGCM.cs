@@ -1,8 +1,5 @@
 ﻿/*
- * This work (Modern Encryption of a String C#, by James Tuley), 
- * identified by James Tuley, is free of known copyright restrictions.
  * https://gist.github.com/4336842
- * http://creativecommons.org/publicdomain/mark/1.0/ 
  */
 
 using System;
@@ -10,7 +7,6 @@ using System.IO;
 using System.Text;
 using Org.BouncyCastle.Crypto;
 using Org.BouncyCastle.Crypto.Engines;
-using Org.BouncyCastle.Crypto.Generators;
 using Org.BouncyCastle.Crypto.Modes;
 using Org.BouncyCastle.Crypto.Parameters;
 using Org.BouncyCastle.Security;
@@ -40,6 +36,22 @@ namespace WeasylOAuthWrapper {
             return key;
         }
 
+        public static string ToBase16String(byte[] data) {
+            StringBuilder sb = new StringBuilder();
+            foreach (byte b in data)
+                sb.Append(((int)b).ToString("X2"));
+            return sb.ToString();
+        }
+
+        public static byte[] FromBase16String(string str) {
+            if (str.Length % 2 != 0)
+                throw new FormatException("String has an odd number of characters");
+            byte[] result = new byte[str.Length / 2];
+            for (int i = 0; i < str.Length; i += 2)
+                result[i / 2] = Convert.ToByte(str.Substring(i, 2), 16);
+            return result;
+        }
+
         /// <summary>
         /// Simple Encryption And Authentication (AES-GCM) of a UTF8 string.
         /// </summary>
@@ -59,7 +71,7 @@ namespace WeasylOAuthWrapper {
 
             var plainText = Encoding.UTF8.GetBytes(secretMessage);
             var cipherText = SimpleEncrypt(plainText, key, nonSecretPayload);
-            return Convert.ToBase64String(cipherText);
+            return ToBase16String(cipherText);
         }
 
 
@@ -74,7 +86,7 @@ namespace WeasylOAuthWrapper {
             if (string.IsNullOrEmpty(encryptedMessage))
                 throw new ArgumentException("Encrypted Message Required!", "encryptedMessage");
 
-            var cipherText = Convert.FromBase64String(encryptedMessage);
+            var cipherText = FromBase16String(encryptedMessage);
             var plainText = SimpleDecrypt(cipherText, key, nonSecretPayloadLength);
             return plainText == null ? null : Encoding.UTF8.GetString(plainText);
         }

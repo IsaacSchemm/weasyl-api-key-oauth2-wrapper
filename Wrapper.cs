@@ -11,7 +11,15 @@ using System.Web;
 using System.Text;
 
 namespace WeasylOAuthWrapper {
+    /// <summary>
+    /// A set of Azure Functions endpoints that let OAuth2 clients obtain a Weasyl API key from a user.
+    /// </summary>
     public static class Wrapper {
+        /// <summary>
+        /// Gets the client secret for the given client ID from the Azure Functions configuration or local.settings.json file.
+        /// </summary>
+        /// <param name="clientId">The client ID</param>
+        /// <returns>The client secret, or null if not found</returns>
         private static string GetClientSecret(string clientId) {
             if (clientId == null)
                 return null;
@@ -21,6 +29,12 @@ namespace WeasylOAuthWrapper {
                 return Environment.GetEnvironmentVariable($"ClientSecret_{i}", EnvironmentVariableTarget.Process);
         }
 
+        /// <summary>
+        /// Encrypts a string using the client secret.
+        /// </summary>
+        /// <param name="clientSecret">The client secret</param>
+        /// <param name="val">The string to encrypt</param>
+        /// <returns>A base-16 encoded encrypted string</returns>
         private static string Encrypt(string clientSecret, string val) {
             byte[] key = Convert.FromBase64String(clientSecret);
 
@@ -28,6 +42,12 @@ namespace WeasylOAuthWrapper {
             return Uri.EscapeDataString(enc);
         }
 
+        /// <summary>
+        /// Decrypts a string using the client secret.
+        /// </summary>
+        /// <param name="clientSecret">The client secret</param>
+        /// <param name="enc">A base-16 encoded encrypted string</param>
+        /// <returns>The original string</returns>
         private static string Decrypt(string clientSecret, string enc) {
             byte[] key = Convert.FromBase64String(clientSecret);
 
@@ -35,6 +55,20 @@ namespace WeasylOAuthWrapper {
             return dec;
         }
 
+        /// <summary>
+        /// OAuth2 authorization endpoint.
+        /// 
+        /// Required parameters:
+        /// * response_type (must be "code")
+        /// * client_id (must correspond to a client secret in the Azure Functions configuration or local.settings.json)
+        /// * redirect_uri
+        /// 
+        /// Optional parameters:
+        /// * state
+        /// 
+        /// Ignored parameters:
+        /// * scope
+        /// </summary>
         [FunctionName("auth")]
         public static IActionResult Auth([HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = null)] HttpRequest req) {
             string response_type = req.Query["response_type"];
@@ -47,7 +81,7 @@ namespace WeasylOAuthWrapper {
                 return new BadRequestObjectResult(new { error = "The client_id is invalid or missing." });
 
             string redirect_uri = req.Query["redirect_uri"];
-            if (Uri.TryCreate(redirect_uri, UriKind.Absolute, out Uri _) == false)
+            if (Uri.TryCreate(redirect_uri, UriKind.Absolute, out Uri redirect_uri_parsed) == false)
                 return new BadRequestObjectResult(new { error = "The redirect_uri is invalid or missing." });
 
             StringBuilder hidden_inputs = new StringBuilder();
@@ -78,7 +112,7 @@ namespace WeasylOAuthWrapper {
         <input type='submit' value='Submit' class='btn btn-primary' />
     </form>
     <hr />
-    <p class='font-weight-bold'>This page was designed for Artwork Inbox and is not part of Weasyl. By entering your API key, you are giving another app access to your account.</p>
+    <p class='font-weight-bold'>This page is not part of Weasyl. By entering your API key, you are giving {1} and {2} access to your account.</p>
     <hr />
     <p class='small'>
         <a href='https://github.com/IsaacSchemm/weasyl-api-key-oauth2-wrapper' target='_blank'>
@@ -86,10 +120,17 @@ namespace WeasylOAuthWrapper {
         </a>
     </p>
 </body>
-</html>", hidden_inputs.ToString());
+</html>", hidden_inputs.ToString(), WebUtility.HtmlEncode(req.Host.Host), redirect_uri_parsed.Host);
             return new FileContentResult(Encoding.UTF8.GetBytes(html), "text/html");
         }
 
+        /// <summary>
+        /// Process an API key entry by the user and redirect to the redirect_uri.
+        /// 
+        /// Two URL parameters will be added:
+        /// * code - an encrypted version of the API key (encrypted using the client secret)
+        /// * state - a copy of the state parameter sent with the /auth request, if any
+        /// </summary>
         [FunctionName("postback")]
         public static IActionResult Postback([HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = null)] HttpRequest req) {
             string client_id = req.Form["client_id"];
@@ -98,8 +139,10 @@ namespace WeasylOAuthWrapper {
                 return new BadRequestResult();
 
             string redirect_uri = req.Form["redirect_uri"];
-            var uriBuilder = new UriBuilder(redirect_uri);
+            if (redirect_uri == null)
+                return new BadRequestResult();
 
+            var uriBuilder = new UriBuilder(redirect_uri);
             var query = HttpUtility.ParseQueryString(uriBuilder.Query);
 
             string api_key = req.Form["api_key"];
@@ -116,6 +159,20 @@ namespace WeasylOAuthWrapper {
             return new RedirectResult(uriBuilder.ToString());
         }
 
+        /// <summary>
+        /// OAuth2 token request endpoint.
+        /// 
+        /// Required parameters:
+        /// * grant_type (must be authorization_code)
+        /// * code (the encrypted API key from the prior step)
+        /// * client_id
+        /// * client_secret
+        /// 
+        /// Ignored parameters:
+        /// * redirect_uri
+        /// </summary>
+        /// <param name="req"></param>
+        /// <returns></returns>
         [FunctionName("token")]
         public static async Task<IActionResult> Token([HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = null)] HttpRequest req) {
             string client_id = req.Form["client_id"];

@@ -5,30 +5,32 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.Azure.WebJobs;
 using Microsoft.Azure.WebJobs.Extensions.Http;
 using Microsoft.AspNetCore.Http;
-using Microsoft.Extensions.Logging;
 using Newtonsoft.Json;
-using System.Net.Http;
 using System.Net;
-using System.Net.Http.Headers;
 using System.Web;
 using System.Text;
 
 namespace Wrapper {
     public static class Wrapper {
-        [FunctionName("test")]
-        public static string Test([HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = null)] HttpRequest req) {
-            byte[] key = Convert.FromBase64String(Environment.GetEnvironmentVariable("ClientSecret", EnvironmentVariableTarget.Process));
+        private static string GetClientSecret(string clientId) {
+            if (clientId == null)
+                return null;
+            else if (!int.TryParse(clientId, out int i))
+                return null;
+            else
+                return Environment.GetEnvironmentVariable($"ClientSecret_{i}", EnvironmentVariableTarget.Process);
+        }
 
-            string val = req.Query["val"];
+        private static string Encrypt(string clientSecret, string val) {
+            byte[] key = Convert.FromBase64String(clientSecret);
+
             string enc = AESGCM.SimpleEncrypt(val, key);
             return Uri.EscapeDataString(enc);
         }
 
-        [FunctionName("test2")]
-        public static string Test2([HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = null)] HttpRequest req) {
-            byte[] key = Convert.FromBase64String(Environment.GetEnvironmentVariable("ClientSecret", EnvironmentVariableTarget.Process));
+        private static string Decrypt(string clientSecret, string enc) {
+            byte[] key = Convert.FromBase64String(clientSecret);
 
-            string enc = req.Query["enc"];
             string dec = AESGCM.SimpleDecrypt(enc, key);
             return dec;
         }
@@ -39,11 +41,17 @@ namespace Wrapper {
             if (response_type != "code")
                 return new BadRequestObjectResult(new { error = "The response_type is invalid or missing." });
 
+            string client_id = req.Query["client_id"];
+            string client_secret = GetClientSecret(client_id);
+            if (client_secret == null)
+                return new BadRequestObjectResult(new { error = "The client_id is invalid or missing." });
+
             string redirect_uri = req.Query["redirect_uri"];
             if (Uri.TryCreate(redirect_uri, UriKind.Absolute, out Uri _) == false)
                 return new BadRequestObjectResult(new { error = "The redirect_uri is invalid or missing." });
 
             StringBuilder hidden_inputs = new StringBuilder();
+            hidden_inputs.AppendLine($"<input type='hidden' name='client_id' value='{HttpUtility.HtmlAttributeEncode(client_id)}' />");
             hidden_inputs.AppendLine($"<input type='hidden' name='redirect_uri' value='{HttpUtility.HtmlAttributeEncode(redirect_uri)}' />");
 
             string state = req.Query["state"];
@@ -84,14 +92,21 @@ namespace Wrapper {
 
         [FunctionName("postback")]
         public static IActionResult Postback([HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = null)] HttpRequest req) {
+            string client_id = req.Form["client_id"];
+            string client_secret = GetClientSecret(client_id);
+            if (client_secret == null)
+                return new BadRequestResult();
+
             string redirect_uri = req.Form["redirect_uri"];
             var uriBuilder = new UriBuilder(redirect_uri);
 
             var query = HttpUtility.ParseQueryString(uriBuilder.Query);
 
             string api_key = req.Form["api_key"];
-            if (api_key != null)
-                query["code"] = api_key;
+            if (api_key == null)
+                return new BadRequestResult();
+
+            query["code"] = Encrypt(client_secret, api_key);
 
             string state = req.Form["state"];
             if (state != null)
@@ -103,6 +118,13 @@ namespace Wrapper {
 
         [FunctionName("token")]
         public static async Task<IActionResult> Token([HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = null)] HttpRequest req) {
+            string client_id = req.Form["client_id"];
+            string client_secret = GetClientSecret(client_id);
+            if (client_secret == null)
+                return new OkObjectResult(new {
+                    error = "unauthorized_client"
+                });
+
             string grant_type = req.Form["grant_type"];
             if (grant_type != "authorization_code") {
                 return new OkObjectResult(new {
@@ -117,9 +139,11 @@ namespace Wrapper {
                 });
             }
 
+            string apiKey = Decrypt(client_secret, code);
+
             var hreq = WebRequest.CreateHttp("https://www.weasyl.com/api/whoami");
             hreq.UserAgent = "weasyl-api-key-oauth2-wrapper/0.0";
-            hreq.Headers["X-Weasyl-API-Key"] = code;
+            hreq.Headers["X-Weasyl-API-Key"] = apiKey;
             try {
                 using (var resp = await hreq.GetResponseAsync())
                 using (var sr = new StreamReader(resp.GetResponseStream())) {
@@ -127,7 +151,7 @@ namespace Wrapper {
                     var user = JsonConvert.DeserializeAnonymousType(json, new { login = "", userid = 0L });
 
                     return new OkObjectResult(new {
-                        access_token = code,
+                        access_token = apiKey,
                         token_type = "weasyl",
                         user.userid,
                         user.login

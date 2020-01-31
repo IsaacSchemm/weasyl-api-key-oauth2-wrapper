@@ -121,7 +121,7 @@ namespace WeasylOAuthWrapper {
     </p>
 </body>
 </html>", hidden_inputs.ToString(), WebUtility.HtmlEncode(req.Host.Host), redirect_uri_parsed.Host);
-            return new FileContentResult(Encoding.UTF8.GetBytes(html), "text/html");
+            return new FileContentResult(Encoding.UTF8.GetBytes(html), "text/html; charset=utf-8");
         }
 
         /// <summary>
